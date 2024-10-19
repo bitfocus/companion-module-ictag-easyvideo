@@ -1,0 +1,24 @@
+{
+	"name": "ictag-easyvideo",
+	"version": "1.0.0",
+	"main": "main.js",
+	"scripts": {
+		"format": "prettier -w .",
+		"package": "companion-module-build"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/bitfocus/companion-module-ictag-easyvideo.git"
+	},
+	"dependencies": {
+		"@companion-module/base": "~1.11.0",
+		"osc": "^2.4.5"
+	},
+	"devDependencies": {
+		"@companion-module/tools": "^2.1.0",
+		"prettier": "^3.3.3"
+	},
+	"prettier": "@companion-module/tools/.prettierrc.json",
+	"packageManager": "yarn@4.4.1"
+}
