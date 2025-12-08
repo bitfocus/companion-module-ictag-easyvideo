@@ -3,7 +3,7 @@
 	"name": "ictag-easyvideo",
 	"shortname": "easyVideo",
 	"description": "Lightwight Videoplayer based on FFMPEG and DirectX11 with external Control via OSC",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"license": "MIT",
 	"repository": "git+https://github.com/bitfocus/companion-module-ictag-easyvideo.git",
 	"bugs": "https://github.com/bitfocus/companion-module-ictag-easyvideo/issues",
@@ -22,5 +22,5 @@
 	"legacyIds": [],
 	"manufacturer": "ICT AG",
 	"products": ["easyVideo"],
-	"keywords": []
+	"keywords": ["video", "player", "ffmpeg", "osc", "ictag"]
 }

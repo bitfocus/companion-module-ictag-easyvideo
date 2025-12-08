@@ -1,7 +1,10 @@
 const { InstanceBase, Regex, runEntrypoint, InstanceStatus, combineRgb } = require('@companion-module/base')
 const UpgradeScripts = require('./upgrades')
 const OSC = require('osc')
-const presets = {}
+const { getPresets } = require('./presets')
+const UpdateActions = require('./actions')
+const UpdateFeedbacks = require('./feedbacks')
+const UpdateVariableDefinitions = require('./variables')
 
 class easyVideoInstance extends InstanceBase {
 	constructor(internal) {
@@ -14,8 +17,10 @@ class easyVideoInstance extends InstanceBase {
 		this.osc_server_init()
 
 		this.updateActions() // export actions
+		this.updateFeedbacks() // export feedbacks
+		this.updateVariableDefinitions() // export variable definitions
 		this.updateStatus(InstanceStatus.Ok)
-		this.setPresetDefinitions(presets)
+		this.setPresetDefinitions(getPresets())
 	}
 	// When module gets deleted
 	async destroy() {
@@ -29,7 +34,13 @@ class easyVideoInstance extends InstanceBase {
 
 	async configUpdated(config) {
 		this.config = config
-		if (this.config.port != this.osc.options.remotePort || this.config.host != this.osc.remoteAddress) {
+		// Recreate OSC server if remote host/port or local port (infoPort) / feedback setting changed
+		const desiredLocalPort = this.config.feedbackEnabled && this.config.infoPort ? this.config.infoPort : '0'
+		if (
+			this.config.port != this.osc.options.remotePort ||
+			this.config.host != this.osc.options.remoteAddress ||
+			desiredLocalPort != this.osc.options.localPort
+		) {
 			this.log('debug', 'host or port configuration changed - reloading osc server')
 			this.osc_server_init()
 		}
@@ -51,549 +62,204 @@ class easyVideoInstance extends InstanceBase {
 				label: 'Remote Port',
 				width: 4,
 				regex: Regex.PORT,
-				tooltip: 'Default Port is 1366'
+				tooltip: 'Default Port is 1366',
+			},
+			{
+				type: 'checkbox',
+				id: 'feedbackEnabled',
+				label: 'Enable Feedback',
+				width: 10,
+			},
+			{
+				type: 'textinput',
+				id: 'infoPort',
+				label: 'Info Port',
+				isVisibleExpression: '$(options:feedbackEnabled) == true',
+				width: 4,
+				regex: Regex.PORT,
+				tooltip: 'Default Port is 4334',
 			},
 		]
 	}
 
 	updateActions() {
-		let path
-		let args = []
+		UpdateActions(this)
+	}
+	updateFeedbacks() {
+		UpdateFeedbacks(this)
+	}
 
-		this.setActionDefinitions({
-			play: {
-				name: 'Video (with ID)',
-				options: [
-					{
-					type: 'textinput',
-					label: 'Video number',
-					id: 'videoId',
-					default: '1',
-					regex: Regex.NUMBER,
-					useVariables: true,
-					},
-				],
-				callback: async (event) => {
-					const videoId = event.options.videoId;
-			
-					// Dynamically replace 'X' in the path with the selected client ID
-					const path = `/ict_ev/play`;
-			
-					// Set the 'type' based on whether 'isActive' is true or false
-					const args = [
-						{
-							type: 'i', // Use 'T' for true, 'F' for false
-							value: videoId - 1,
-						},
-					];
-			
-					// Send the OSC message
-					this.osc.send({
-						address: path,
-						args: args,
-					});
-			
-					// Log the message for debugging purposes
-					this.log(
-						'debug',
-						`Sent OSC to ${this.config.host}:${this.config.port} with path: ${path} and args: ${JSON.stringify(args)}`
-					);
-				},
-			},
-			cue: {
-				name: 'Cue Video (with ID)',
-				options: [
-					{
-					type: 'textinput',
-					label: 'Video number',
-					id: 'videoId',
-					default: '1',
-					regex: Regex.SIGNED_NUMBER,
-					useVariables: true,
-					},
-				],
-				callback: async (event) => {
-					const videoId = event.options.videoId;
-			
-					// Dynamically replace 'X' in the path with the selected client ID
-					const path = `/ict_ev/cue`;
-			
-					// Set the 'type' based on whether 'isActive' is true or false
-					const args = [
-						{
-							type: 'i', // Use 'T' for true, 'F' for false
-							value: videoId - 1,
-						},
-					];
-			
-					// Send the OSC message
-					this.osc.send({
-						address: path,
-						args: args,
-					});
-			
-					// Log the message for debugging purposes
-					this.log(
-						'debug',
-						`Sent OSC to ${this.config.host}:${this.config.port} with path: ${path} and args: ${JSON.stringify(args)}`
-					);
-				},
-			},
-			pause: {
-				name: 'Pause/Play',
-				options: [],
-				callback: async (event) => {
-					// Dynamically replace 'X' in the path with the selected client ID
-					const path = `/ict_ev/pause`;
-			
-					// Set the 'type' based on whether 'isActive' is true or false
-					const args = [];
-			
-					// Send the OSC message
-					this.osc.send({
-						address: path,
-						args: args,
-					});
-			
-					// Log the message for debugging purposes
-					this.log(
-						'debug',
-						`Sent OSC to ${this.config.host}:${this.config.port} with path: ${path} and args: ${JSON.stringify(args)}`
-					);
-				},
-			},
-			stop: {
-				name: 'Stop',
-				options: [],
-				callback: async (event) => {
-					// Dynamically replace 'X' in the path with the selected client ID
-					const path = `/ict_ev/stop`;
-			
-					// Set the 'type' based on whether 'isActive' is true or false
-					const args = [];
-			
-					// Send the OSC message
-					this.osc.send({
-						address: path,
-						args: args,
-					});
-			
-					// Log the message for debugging purposes
-					this.log(
-						'debug',
-						`Sent OSC to ${this.config.host}:${this.config.port} with path: ${path} and args: ${JSON.stringify(args)}`
-					);
-				},
-			},
-			next: {
-				name: 'Next Clip',
-				options: [],
-				callback: async (event) => {
-					// Dynamically replace 'X' in the path with the selected client ID
-					const path = `/ict_ev/next`;
-			
-					// Set the 'type' based on whether 'isActive' is true or false
-					const args = [];
-			
-					// Send the OSC message
-					this.osc.send({
-						address: path,
-						args: args,
-					});
-			
-					// Log the message for debugging purposes
-					this.log(
-						'debug',
-						`Sent OSC to ${this.config.host}:${this.config.port} with path: ${path} and args: ${JSON.stringify(args)}`
-					);
-				},
-			},
-			prev: {
-				name: 'Previous Clip',
-				options: [],
-				callback: async (event) => {		
-					// Dynamically replace 'X' in the path with the selected client ID
-					const path = `/ict_ev/prev`;
-			
-					// Set the 'type' based on whether 'isActive' is true or false
-					const args = [];
-			
-					// Send the OSC message
-					this.osc.send({
-						address: path,
-						args: args,
-					});
-			
-					// Log the message for debugging purposes
-					this.log(
-						'debug',
-						`Sent OSC to ${this.config.host}:${this.config.port} with path: ${path} and args: ${JSON.stringify(args)}`
-					);
-				},
-			},
-			overlay: {
-				name: 'Overlay',
-				options: [
-					{
-						type: 'dropdown',
-						label: 'State',
-						id: 'overlay',
-						default: '1',
-						choices: [
-							{ id: '1', label: 'Off' },
-							{ id: '2', label: 'On' },
-							{ id: '3', label: 'Toggle' },
-						],
-						minChoicesForSearch: 0,
-					},
-				],
-				callback: async (event) => {	
-					const overlay = event.options.overlay;	
-					// Dynamically replace 'X' in the path with the selected client ID
-					const path = `/ict_ev/overlay`;
-			
-					// Set the 'type' based on whether 'isActive' is true or false
-					const args = [
-						{
-							type: 'i', // Use 'T' for true, 'F' for false
-							value: overlay - 1,
-						},
-					];
-			
-					// Send the OSC message
-					this.osc.send({
-						address: path,
-						args: args,
-					});
-			
-					// Log the message for debugging purposes
-					this.log(
-						'debug',
-						`Sent OSC to ${this.config.host}:${this.config.port} with path: ${path} and args: ${JSON.stringify(args)}`
-					);
-				},
-			},
-	})		
+	updateVariableDefinitions() {
+		UpdateVariableDefinitions(this)
 	}
 
 	/**
 	 * Initialisation method for the OSC server used to send and receive messages
 	 */
-		osc_server_init() {
-			this.updateStatus('connecting')
-			var self = this
-			this.log('debug', 'osc_server_init method started')
-			if (this.osc) {
-				try {
-					this.osc.close()
-					delete this.osc
-				} catch (e) {
-					// Ignore
-				}
+	osc_server_init() {
+		this.updateStatus('connecting')
+		var self = this
+		this.log('debug', 'osc_server_init method started')
+		if (this.osc) {
+			try {
+				this.osc.close()
+				delete this.osc
+			} catch (e) {
+				// Ignore
 			}
-			/**
-			 * Create an osc.js UDP Port listening on port defined in config.
-			 * */
-			this.osc = new OSC.UDPPort({
-				localAddress: '0.0.0.0',
-				remoteAddress: this.config.host,
-				localPort: '0',
-				remotePort: this.config.port,
-				broadcast: true,
-				metadata: true,
-			})
-	
-			/**
-			 * Listener to receive messages
-			 */
-			/* this.osc.on('message', (oscMsg, timeTag, info) => {
-				this.log('debug', `Received OSC message from: ${JSON.stringify(info)}`)
-	
-				const address = oscMsg['address']
-				const args = oscMsg['args'][0]
-				const value = args['value']
-	
-				this.log('debug', `OSC Content is: ${JSON.stringify(oscMsg)}`)
-			}) */
-	
-			/**
-			 * Properly logging error
-			 */
-			this.osc.on('error', (err) => {
-				this.log('error', 'Error: ' + err.message)
-				this.updateStatus('UnknownError', err.message)
-			})
-	
-			// Open the socket.
-			this.osc.open()
-	
-			this.log('debug', `osc_server_init method finished ${this.osc}`)
-			this.updateStatus(InstanceStatus.Ok)
 		}
+		/**
+		 * Create an osc.js UDP Port listening on port defined in config.
+		 * */
+		const localPort = this.config.feedbackEnabled && this.config.infoPort ? this.config.infoPort : '0'
+
+		this.osc = new OSC.UDPPort({
+			localAddress: '0.0.0.0',
+			remoteAddress: this.config.host,
+			localPort: localPort,
+			remotePort: this.config.port,
+			broadcast: true,
+			metadata: true,
+		})
+
+		/**
+		 * Listener to receive messages
+		 */
+		this.osc.on('message', (oscMsg, timeTag, info) => {
+			this.log('debug', `Received OSC message from: ${JSON.stringify(info)}`)
+
+			const address = oscMsg.address
+			const args = oscMsg.args || []
+
+			this.log('debug', `OSC Content is: ${JSON.stringify(oscMsg)}`)
+
+			// Only update variables if feedback is enabled in config
+			if (!this.config || !this.config.feedbackEnabled) {
+				return
+			}
+
+			// Helper to format seconds to H:MM:SS or M:SS
+			const formatSeconds = (sec) => {
+				// If no usable value provided, return placeholder
+				if (sec === null || sec === undefined || sec === '') return '--:--'
+				const n = Number(sec)
+				if (Number.isNaN(n)) return '--:--'
+				const sign = n < 0 ? '-' : ''
+				let s = Math.abs(Math.floor(n))
+				const hours = Math.floor(s / 3600)
+				const minutes = Math.floor((s % 3600) / 60)
+				const seconds = s % 60
+				if (hours > 0) {
+					// H:MM:SS (hours no padding)
+					return `${sign}${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+				}
+				// MM:SS (minutes padded to 2 digits)
+				return `${sign}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+			}
+
+			// Helper to format playState to human readable
+			const formatPlayState = (ps) => {
+				if (ps === null || ps === undefined || ps === '') return 'not ready'
+				// numeric codes
+				if (typeof ps === 'number') {
+					switch (ps) {
+						case 1:
+							return 'playing'
+						case 2:
+							return 'paused'
+						case 0:
+							return 'stopped'
+						default:
+							return 'not ready'
+					}
+				}
+				// string values
+				if (typeof ps === 'string') {
+					const s = ps.toLowerCase()
+					if (s.includes('play')) return 'playing'
+					if (s.includes('pause')) return 'paused'
+					if (s.includes('stop')) return 'stopped'
+					return 'not ready'
+				}
+				return 'not ready'
+			}
+
+			try {
+				if (address === '/ict_ev/info/playback') {
+					// ifffii -> clipId, clipTime, clipDuration, clipRemain, clipLoop, playState
+					const clipId = args[0]?.value ?? null
+					const clipTime = args[1]?.value ?? null
+					const clipDuration = args[2]?.value ?? null
+					const clipRemain = args[3]?.value ?? null
+					const clipLoop = args[4]?.value ?? null
+					const playState = args[5]?.value ?? null
+
+					const values = {
+						playback_clipId: clipId,
+						playback_clipTime: clipTime,
+						playback_clipDuration: clipDuration,
+						playback_clipRemain: clipRemain,
+						playback_clipTimeFormatted: formatSeconds(clipTime),
+						playback_clipDurationFormatted: formatSeconds(clipDuration),
+						playback_clipRemainFormatted: formatSeconds(clipRemain),
+						playback_clipLoop: clipLoop,
+						playback_clipLoopFormatted: clipLoop === 1 ? 'Looping' : clipLoop === 0 ? 'Not Looping' : 'unknown',
+						playback_playState: playState,
+						playback_playStateFormatted: formatPlayState(playState),
+					}
+					this.updateFeedbacks()
+					if (typeof this.setVariableValues === 'function') {
+						this.setVariableValues(values)
+					} else if (typeof this.setVariable === 'function') {
+						Object.entries(values).forEach(([k, v]) => this.setVariable(k, v))
+					} else {
+						this.log('debug', `Variable update: ${JSON.stringify(values)}`)
+					}
+				} else if (address === '/ict_ev/info/currentFile') {
+					// issfi -> clipId, clipName, clipPath, clipDuration, clipLoop
+					const clipId = args[0]?.value ?? null
+					const clipName = args[1]?.value ?? ''
+					const clipPath = args[2]?.value ?? ''
+					const clipDuration = args[3]?.value ?? null
+					const clipLoop = args[4]?.value ?? null
+
+					const values = {
+						current_clipId: clipId,
+						current_clipName: clipName,
+						current_clipPath: clipPath,
+						current_clipDuration: clipDuration,
+						current_clipDurationFormatted: formatSeconds(clipDuration),
+						current_clipLoop: clipLoop,
+						current_clipLoopFormatted: clipLoop === 1 ? 'Looping' : clipLoop === 0 ? 'Not Looping' : 'unknown',
+					}
+
+					if (typeof this.setVariableValues === 'function') {
+						this.setVariableValues(values)
+					} else if (typeof this.setVariable === 'function') {
+						Object.entries(values).forEach(([k, v]) => this.setVariable(k, v))
+					} else {
+						this.log('debug', `Variable update: ${JSON.stringify(values)}`)
+					}
+				}
+			} catch (e) {
+				this.log('error', `Error handling OSC message ${address}: ${e.message}`)
+			}
+		})
+
+		/**
+		 * Properly logging error
+		 */
+		this.osc.on('error', (err) => {
+			this.log('error', 'Error: ' + err.message)
+			this.updateStatus('UnknownError', err.message)
+		})
+
+		// Open the socket.
+		this.osc.open()
+
+		this.log('debug', `osc_server_init method finished ${this.osc}`)
+		this.updateStatus(InstanceStatus.Ok)
+	}
 }
 
 runEntrypoint(easyVideoInstance, UpgradeScripts)
-
-
-/**
-* PRESETS
-*/
-
-
-presets[`Pause`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Controls', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `Pause`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: 'Pause\nPlay', // You can use variables from your module here
-		size: '18',
-		color: combineRgb(0, 0, 0),
-		bgcolor: combineRgb(255,255,0),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'pause',
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-presets[`Stop`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Controls', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `Stop`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: `Stop`, // You can use variables from your module here
-		size: '18',
-		color: combineRgb(255, 255, 255),
-		bgcolor: combineRgb(255,0,0),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'stop',
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-presets[`Prev`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Controls', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `Prev`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: `Prev\nClip`, // You can use variables from your module here
-		size: '18',
-		color: combineRgb(255, 255, 255),
-		bgcolor: combineRgb(0,204,0	),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'prev',
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-
-presets[`Next`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Controls', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `Next`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: `Next\nClip`, // You can use variables from your module here
-		size: '18',
-		color: combineRgb(255, 255, 255),
-		bgcolor: combineRgb(0,204,0	),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'next',
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-presets[`Overlay_on`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Overlay', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `On`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: `PiP\nOn`, // You can use variables from your module here
-		size: '18',
-		color: combineRgb(255, 255, 255),
-		bgcolor: combineRgb(0,51,204),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'overlay',
-					options: {
-						overlay: '2' 
-					},
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-presets[`Overlay_off`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Overlay', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `Off`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: `PiP\nOff`, // You can use variables from your module here
-		size: '18',
-		color: combineRgb(255, 255, 255),
-		bgcolor: combineRgb(0,51,204),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'overlay',
-					options: {
-						overlay: '1' 
-					},
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-presets[`Overlay_toggle`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Overlay', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `Off`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: `PiP\nToggle`, // You can use variables from your module here
-		size: '18',
-		color: combineRgb(255, 255, 255),
-		bgcolor: combineRgb(0,51,204),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'overlay',
-					options: {
-						overlay: '3' 
-					},
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-
-presets[`Overlay_toggle`] = {
-	type: 'button', // This must be 'button' for now
-	category: 'Overlay', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-	name: `Off`, // A name for the preset. Shown to the user when they hover over it
-	style: {
-		// This is the minimal set of style properties you must define
-		text: `PiP\nToggle`, // You can use variables from your module here
-		size: '18',
-		color: combineRgb(255, 255, 255),
-		bgcolor: combineRgb(0,51,204),
-	},
-	steps: [
-		{
-			down: [
-				{
-					// add an action on down press
-					actionId: 'overlay',
-					options: {
-						overlay: '3' 
-					},
-				},
-			],
-			up: [],
-		},
-	],
-	feedbacks: [], // You can add some presets from your module here
-}
-
-for (let i = 1; i <= 99; i++) {
-	presets[`play_${i}`] = {
-		type: 'button',
-		category: 'Video',
-		style: {
-			text: 'Play\nVIDEO ' + i,
-			size: '18',
-			color: combineRgb(255, 255, 255),
-			bgcolor: combineRgb(0, 153, 0),
-		},
-		steps: [
-			{
-				down: [
-					{
-						actionId: 'play',
-						options: {
-							videoId: i,
-						},
-					},
-				],
-				up: [],
-			},
-		],
-		feedbacks: [],
-	}
-	presets[`cue_${i}`] = {
-		type: 'button',
-		category: 'Cue Video',
-		style: {
-			text: 'Cue\nVIDEO ' + i,
-			size: '18',
-			color: combineRgb(255, 255, 255),
-			bgcolor: combineRgb(128,0,255),
-		},
-		steps: [
-			{
-				down: [
-					{
-						actionId: 'cue',
-						options: {
-							videoId: i,
-						},
-					},
-				],
-				up: [],
-			},
-		],
-		feedbacks: [],
-	}
-}
