@@ -12,12 +12,12 @@
 		"url": "git+https://github.com/bitfocus/companion-module-ictag-easyvideo.git"
 	},
 	"dependencies": {
-		"@companion-module/base": "~1.13.5",
+		"@companion-module/base": "~1.15.1",
 		"companion-module-utils": "^0.5.0",
 		"osc": "^2.4.5"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^2.8.0",
+		"@companion-module/tools": "^2.9.1",
 		"prettier": "^3.7.4"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json",
